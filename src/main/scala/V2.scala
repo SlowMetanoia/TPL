@@ -75,30 +75,21 @@ object V2 extends App{
     lexAnalyze(deComment(str.split("\n")).mkString("\n"))
   
   sealed trait Value
-  case class Identifier(name:String,id:Int) extends Value
+  case class Identifier(name:String,id:IdTable.GID) extends Value
   case class ConstString(value:String) extends Value
   
   sealed trait Structure
   case class Operation(left:Value,op:String,right: Value) extends Structure
   case class While(body:List[Structure], condition:Operation) extends Structure
   
-  case class ParsingResult(code:List[Structure],table:Map[String,Int])
+  case class ParsingResult(code:List[Structure],table:IdTable.MutableTable)
   
   class generalParser extends RegexParsers{
-    var idTable:Map[String,Int] = Map("$def"->0)
-    def getId(name:String):Int =
-      idTable.getOrElse(
-        name,
-        {
-          idTable = idTable + ( name -> (idTable.values.max + 1))
-          getId(name)
-        }
-        )
-    def hasVar(name:String):Boolean = idTable.contains(name)
+    var idTable0: IdTable.MutableTable = IdTable.getTable
     
     //value
     def id:Parser[Identifier] = identifierPattern^^ { name=>
-      Identifier(name, getId(name)) }
+      Identifier(name, idTable0.getOrInit(name)) }
     def constString:Parser[ConstString] = strConstPattern^^ConstString
     def value:Parser[Value] = id|constString
     
@@ -109,10 +100,13 @@ object V2 extends App{
     }
     
     //do...while(...)
-    def DO:Parser[Unit] = "do"^^ { _=>() }
-    def WHILE:Parser[Operation] = """while\(""".r~>operation<~"""\)""".r
+    def DO:Parser[Unit] = "do"^^ { _=>idTable0.up() }
+    def WHILE:Parser[Operation] = """while\(""".r~>operation<~"""\)""".r ^^{ operation => idTable0.down(); operation}
     def codeLines:Parser[List[Structure]] = rep(cycle | operation)
-    def cycle:Parser[While] = DO ~> codeLines ~ WHILE ^^{case body ~ cond => While(body, cond)}
+    def cycle:Parser[While] = DO ~> codeLines ~ WHILE ^^{
+      case body ~ cond =>
+        While(body, cond)
+    }
   }
   
   def resultPrint(parsingResult: ParsingResult):Unit = {
@@ -128,13 +122,13 @@ object V2 extends App{
         printLevel(lvl)
         println(op)
     }
-    def printTable(table:Map[String,Int]) = println(table.mkString("\n"))
+    def printTable(table:IdTable.MutableTable) = println(table)
     
     println("Execution tree:")
     parsingResult.code.foreach(struct=>printStructure(struct))
     println
     println("Var table:")
-    printTable(parsingResult.table-"$def"-"while")
+    printTable(parsingResult.table.exclude)
   }
   
   object generalParser{
@@ -147,7 +141,7 @@ object V2 extends App{
           lOut.get.mkString("\n")
           )
         if(prsR.successful)
-          resultPrint(ParsingResult(prsR.get,parser.idTable))
+          resultPrint(ParsingResult(prsR.get,parser.idTable0))
         else {
           println("error on execution tree building")
           println(prsR)
@@ -170,11 +164,6 @@ object V2 extends App{
       |
       |
       |//sdflgjsdfg
-      |do //dfgdglkldfg
-      |c = b
-      |
-      |
-      |while("fdgdf">=a)
       |while(d<=c)
       |g    = "well,well"
       |
@@ -183,15 +172,5 @@ object V2 extends App{
       |while(c<=b)
       |
       |""".stripMargin
-  val test ="do do while a=a while(a<=a) while(a>=a)"
   generalParser.tryToParse(generalTest)
-  generalParser.tryToParse(errTest)
-  generalParser.tryToParse(test)
-  
-  /**
-   * Отчёт: как устроено
-   * дерево
-   * "как работает parsers"
-   *
-   */
 }

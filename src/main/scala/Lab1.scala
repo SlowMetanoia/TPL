@@ -20,7 +20,7 @@ object Lab1 extends App{
     def operator:Parser[Operator] = ("<="|">="|"=")^^Operator
     def kw:Parser[KeyWord]        = delimiter ~>("do"|"while")<~ delimiter^^KeyWord
     def cond:Parser[Condition]    = "("~>value~operator~value<~")"^^{ case l~op~r => Condition(l,op,r) }
-    def any:Parser[List[Lexeme]]  = rep(cond|value|operator|kw)
+    def any:Parser[List[Lexeme]]  = rep(cond|kw|operator|value)
   }
   val testData = """
                    |a =           "fgsdfg"
@@ -47,5 +47,5 @@ object Lab1 extends App{
                    |
                    |""".stripMargin
   val test2 = """a=b while (b)"""
-  println(Lexer.parse(Lexer.any, test2).get.mkString("\n"))
+  println(Lexer.parseAll(Lexer.any, testData).get.mkString("\n"))
 }
